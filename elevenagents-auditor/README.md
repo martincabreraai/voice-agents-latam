@@ -4,7 +4,7 @@ A command-line tool that reads the configuration of an **ElevenAgents** voice ag
 
 It runs on one agent, or on a whole workspace at once to show which gaps repeat across many agents.
 
-> Built as a working prototype of one line in the *Adoption Strategist – LATAM* job description: **"Proactively audit customer agents prompts, configurations, and feature setup to identify gaps, and share recommendations as a value-add service that drives deeper adoption."**
+> Built as a working prototype of a core customer-adoption task: **proactively audit customer agents' prompts, configurations and feature setup, find the gaps, and turn them into recommendations that drive deeper adoption.**
 
 - Read-only: it only calls `GET` endpoints. It never changes an agent.
 - No dependencies: Python 3.9+ standard library. Runs anywhere, fast.
@@ -53,9 +53,9 @@ Heuristics are simple on purpose (keyword and heading detection, a small Spanish
 
 Model guidance was checked against the official ElevenLabs docs in October 2026 (models, prompting guide, guardrails). Model lineups change often; the lists live in one place at the top of `rules.py`.
 
-## How it fits the role
+## How it fits an adoption program
 
-The job asks to audit customer agents' prompts, configurations and feature setup, and to turn that into recommendations that drive deeper adoption. This tool does the first pass in seconds so the human time goes to the conversation with the customer:
+The task is to audit customer agents' prompts, configurations and feature setup, and to turn that into recommendations that drive deeper adoption. This tool does the first pass in seconds so the human time goes to the conversation with the customer:
 
 1. **Before a QBR or check-in:** run `audit --agent-id` and bring a one-page report with the three highest-impact fixes.
 2. **As a self-serve offer:** the same report, sent automatically to new customers in week two of onboarding ("here's how your agent compares to good practice").
@@ -88,7 +88,7 @@ For a regional book of hundreds of customers, the same engine would run as a sch
 
 **Qué es.** Una herramienta de línea de comandos que lee la configuración de un agente de ElevenAgents (por la API o desde un JSON exportado) y la evalúa contra una rúbrica de buenas prácticas para agentes de voz en español. Devuelve un informe con puntaje por dimensión, hallazgos y recomendaciones concretas, en español y en inglés, en Markdown y en HTML. Solo lee: nunca modifica un agente.
 
-**Por qué existe.** El aviso de *Adoption Strategist – LATAM* pide "auditar proactivamente los prompts, la configuración y el uso de funciones de los agentes de los clientes, detectar brechas y compartir recomendaciones como un servicio de valor agregado". Esto es un prototipo funcionando de esa tarea.
+**Por qué existe.** Una tarea central de adopción es auditar de forma proactiva los prompts, la configuración y el uso de funciones de los agentes de los clientes, detectar brechas y convertirlas en recomendaciones que profundicen el uso. Esto es un prototipo funcionando de esa tarea.
 
 **Las diez dimensiones:** estructura del prompt, primer mensaje, idioma y voz (incluido el acento regional y el voseo), modelos y latencia, turnos e interrupciones, herramientas, base de conocimiento, guardrails y datos sensibles, evaluación y recolección de datos, y duración y cierre de la llamada. El porqué de cada regla está en la tabla de arriba.
 
