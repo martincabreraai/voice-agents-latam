@@ -1,0 +1,18 @@
+{
+  "voice_id": "bN1bDXgDIGX5lw0rtY2B",
+  "name": "Melody - Ecommerce Voice",
+  "category": "professional",
+  "labels": {
+    "language": "es",
+    "accent": "argentine",
+    "descriptive": "professional",
+    "use_case": "informative_educational",
+    "gender": "female",
+    "age": "middle_aged"
+  },
+  "verified_languages": [
+    {"language": "es", "accent": "argentine", "locale": "es-AR", "model_id": "eleven_flash_v2_5"},
+    {"language": "es", "accent": "argentine", "locale": "es-AR", "model_id": "eleven_multilingual_v2"},
+    {"language": "es", "accent": "argentine", "locale": "es-AR", "model_id": "eleven_v4_turbo"}
+  ]
+}

@@ -1,0 +1,15 @@
+# Secrets
+.env
+.env.*
+*.key
+
+# Private material: real agent configs, reports with customer names, local agent ids
+privado/
+reports/
+**/reports/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
