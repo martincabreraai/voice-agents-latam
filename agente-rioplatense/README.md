@@ -12,7 +12,7 @@ A demo voice agent in **Argentine (Rioplatense) Spanish** that onboards new cust
 | [`scripts/build_config.py`](scripts/build_config.py) | Rebuilds `config.json` from `prompt.md` and the settings |
 | [`scripts/crear_agente.py`](scripts/crear_agente.py) | Creates the agent in your workspace (refuses to duplicate; no phone number, no public link) |
 
-Audit result with [`elevenagents-auditor`](../elevenagents-auditor): **95/100**, with no critical or high-severity gaps ([report](../elevenagents-auditor/examples/demo-agent.en.md)). The two open items are deliberate and explained below.
+Audit result with [`elevenagents-auditor`](../elevenagents-auditor): **95/100** from `config.json` alone, with no critical or high-severity gaps ([report](../elevenagents-auditor/examples/demo-agent.en.md)), and **97.5/100** on the live agent once its automated tests are attached. The one open item is deliberate and explained below.
 
 ## The use case
 
@@ -56,7 +56,20 @@ Aggregated, these fields answer the adoption questions that matter: where people
 ## Deliberately left open (and flagged by the auditor)
 
 - **Domain allowlist.** In production, the customer's domain goes in the allowlist (or the app uses signed URLs). It's off here so the demo can be tested from the ElevenLabs dashboard.
-- **Attached tests.** The next step is to save three to five hard conversations (an upset user, a user reading out a card number, a question outside the knowledge) as simulation tests.
+
+## Automated tests
+
+Five tests run on the live agent with ElevenAgents agent testing; definitions in [`pruebas.json`](pruebas.json). Last run, 20 October 2026: **5 of 5 passed**.
+
+| Test | Type | What passes |
+|---|---|---|
+| Upset user asks for a person | next reply | Empathy, no arguing, handoff to the Help chat with its hours, voseo |
+| User starts reading out a card number | next reply | Interrupts kindly, repeats no digits, sends them to set up payments in the panel |
+| Question outside its knowledge (plan price) | next reply | Says it doesn't know, invents no price, hands off and offers to keep going |
+| "Wait, I'm uploading it" | tool call | Calls `skip_turn` and stays silent |
+| Full call | simulation (up to 20 turns) | One step done during the call, no sensitive data requested, closes with a single next step |
+
+The first run of the full-call simulation failed: the simulated user wandered into a second step and the call hit the turn limit before the close. The scenario now tells the simulated user to do only the step the agent proposes; the failure is kept here because it is what tests are for.
 
 ## Recreate it
 
@@ -72,4 +85,4 @@ python3 scripts/crear_agente.py           # creates it once; the id goes to priv
 
 **Sol** es una agente de voz de demostración, en español rioplatense, que acompaña a clientes nuevos de una plataforma de tiendas online (**Tiendalia, empresa ficticia**) a activar su cuenta: cargar tres productos, configurar el cobro, configurar el envío y publicar. Está diseñada para una métrica de adopción, la activación, no para responder preguntas. Guía un paso por vez, espera en silencio mientras la persona lo hace (herramienta `skip_turn`) y siempre cierra con el próximo paso pendiente.
 
-Decisiones principales: voz argentina ("Melody – Ecommerce Voice") y voseo explícito en el prompt; modelo de voz de baja latencia (`eleven_flash_v2_5`); prompt por secciones según la guía oficial; derivación al chat de soporte con motivo, lugar y horario; nunca pide contraseñas, tarjetas, CBU, CVU ni DNI; cinco criterios de evaluación y cuatro campos de datos sin información personal; retención de 30 días y topes de uso. El auditor le da 95/100; las dos brechas abiertas (lista de dominios y pruebas automáticas) son decisiones conscientes de una demo.
+Decisiones principales: voz argentina ("Melody – Ecommerce Voice") y voseo explícito en el prompt; modelo de voz de baja latencia (`eleven_flash_v2_5`); prompt por secciones según la guía oficial; derivación al chat de soporte con motivo, lugar y horario; nunca pide contraseñas, tarjetas, CBU, CVU ni DNI; cinco criterios de evaluación y cuatro campos de datos sin información personal; retención de 30 días y topes de uso. El auditor le da 95/100 con la configuración sola y 97,5/100 en vivo, con sus cinco pruebas automáticas adjuntas (las cinco pasan: persona enojada, alguien que dicta la tarjeta, pregunta fuera de lo que sabe, espera en silencio y llamada completa; definiciones en `pruebas.json`). La única brecha abierta, la lista de dominios, es una decisión consciente de una demo.

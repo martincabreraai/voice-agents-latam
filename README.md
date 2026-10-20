@@ -8,7 +8,7 @@ This repo has two small, working pieces built around one question: *how do you h
 | Piece | What it is |
 |---|---|
 | [**elevenagents-auditor**](elevenagents-auditor/) | A Python CLI that reads an ElevenAgents configuration (from the API or a JSON export) and scores it against a 10-dimension rubric for Spanish voice agents. It covers prompt structure, first message, language and regional voice, latency, turn-taking, tools, knowledge base, guardrails, evaluation and call lifecycle. Reports are in Markdown and HTML, in English and Spanish. A batch mode audits a whole workspace and shows which gaps repeat across agents, which is where programs come from. Read-only, no dependencies, with tests. |
-| [**agente-rioplatense**](agente-rioplatense/) | *Sol*, a demo onboarding agent in Rioplatense Spanish for a fictional SaaS. It is designed for an activation metric (one more setup step done per call), with voseo end to end, an Argentine voice, escalation rules, guardrails for sensitive data, and evaluation criteria and data collection from day one. It scores 95/100 on the auditor. |
+| [**agente-rioplatense**](agente-rioplatense/) | *Sol*, a demo onboarding agent in Rioplatense Spanish for a fictional SaaS. It is designed for an activation metric (one more setup step done per call), with voseo end to end, an Argentine voice, escalation rules, guardrails for sensitive data, and evaluation criteria and data collection from day one. It scores 95/100 on the auditor (97.5 live, with five automated tests that pass). |
 
 Both are working prototypes of a core customer-adoption task: proactively auditing customer agents' prompts, configurations and feature setup to find gaps, and turning the findings into recommendations that drive deeper adoption.
 
