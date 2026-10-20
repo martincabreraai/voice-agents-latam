@@ -57,6 +57,11 @@ class AuditReport:
     context_notes: List[Text] = field(default_factory=list)
     meta: Dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def blocked(self) -> bool:
+        """A failed critical check blocks 'ready to scale', whatever the average says."""
+        return any(r.severity == "critical" and r.status == "fail" for d in self.dimensions for r in d.results)
+
     def gaps(self) -> List[RuleResult]:
         out = [r for d in self.dimensions for r in d.results if r.is_gap]
         out.sort(key=lambda r: (SEVERITY_ORDER.index(r.severity), r.status == "partial"))

@@ -63,7 +63,7 @@ Aggregated, these fields answer the adoption questions that matter: where people
 ```bash
 python3 scripts/build_config.py           # after editing prompt.md
 export ELEVENLABS_API_KEY=...             # never commit it
-python3 scripts/crear_agente.py           # creates it once; the id is saved outside the repo
+python3 scripts/crear_agente.py           # creates it once; the id goes to privado/, which git ignores
 ```
 
 ---

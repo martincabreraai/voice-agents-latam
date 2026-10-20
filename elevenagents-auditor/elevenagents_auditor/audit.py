@@ -42,9 +42,11 @@ def audit(cfg: Dict[str, Any], voice: Optional[Dict[str, Any]] = None,
     )
 
 
-def grade(score: Optional[float]) -> Text:
+def grade(score: Optional[float], blocked: bool = False) -> Text:
     if score is None:
         return Text("sin datos", "no data")
+    if blocked:
+        return Text("Bloqueado: tiene una falla crítica", "Blocked: it has a critical failure")
     if score >= 85:
         return Text("Listo para escalar", "Ready to scale")
     if score >= 70:

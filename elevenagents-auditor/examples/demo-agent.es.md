@@ -1,8 +1,8 @@
 # Auditoría de agente ElevenAgents
 
 **Agente:** Demo - Sol, onboarding de Tiendalia (rioplatense)  
-**Fecha:** 2026-10-19  
-**Configuración leída:** language `es` · LLM `gpt-6-luna` · TTS `eleven_flash_v2_5` · voice `Melody - Ecommerce Voice`
+**Fecha:** 2026-10-20  
+**Configuración leída:** idioma `es` · LLM `gpt-6-luna` · TTS `eleven_flash_v2_5` · voz `Melody - Ecommerce Voice`
 
 ## Puntaje general: 95/100 — Listo para escalar
 
@@ -56,7 +56,7 @@
 
 ### Modelos y latencia · 100/100
 
-- ✅ **Generación del LLM** — LLM actual: 'gpt-6-luna'.
+- ✅ **Generación del LLM** — 'gpt-6-luna' es de una familia que la documentación lista hoy y no figura entre las generaciones viejas.
 - ✅ **Modelo de voz para tiempo real** — 'eleven_flash_v2_5' es apto para tiempo real.
 - ✅ **Temperatura** — Temperatura 0.3.
 
@@ -77,7 +77,7 @@
 ### Guardrails y datos sensibles · 80/100
 
 - ✅ **Guardrails de la plataforma** — Foco y protección contra prompt injection activados.
-- ✅ **Nunca pedir datos sensibles** — El prompt menciona qué datos sensibles no pedir.
+- ✅ **Nunca pedir datos sensibles** — El prompt prohíbe pedir datos sensibles.
 - ✅ **Retención de conversaciones** — Retención de 30 días.
 - ❌ **Quién puede iniciar conversaciones** — Agente público sin lista de dominios: cualquiera con el id puede abrir sesiones y consumir créditos.  
   → Para un widget en la web, agregá el dominio del cliente a la allowlist; para apps, usá URLs firmadas.

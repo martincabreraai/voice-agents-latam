@@ -25,6 +25,8 @@ L = {
     "na": {"es": "no aplica", "en": "n/a"},
     "notes": {"es": "Notas", "en": "Notes"},
     "setup": {"es": "Configuración leída", "en": "Configuration read"},
+    "language": {"es": "idioma", "en": "language"},
+    "voice": {"es": "voz", "en": "voice"},
     "severity": {"es": "Severidad", "en": "Severity"},
     "footer": {
         "es": "Generado con elevenagents-auditor. La rúbrica y el porqué de cada regla están en el README.",
@@ -58,11 +60,11 @@ def render_markdown(rep: AuditReport, lang: str = "en", top_n: int = 5) -> str:
     w(f"**{L['agent'][lang]}:** {rep.agent_name}  \n")
     w(f"**{L['date'][lang]}:** {date.today().isoformat()}  \n")
     m = rep.meta
-    w(f"**{L['setup'][lang]}:** language `{m.get('language')}` · LLM `{m.get('llm')}` · TTS `{m.get('tts_model')}`")
+    w(f"**{L['setup'][lang]}:** {L['language'][lang]} `{m.get('language')}` · LLM `{m.get('llm')}` · TTS `{m.get('tts_model')}`")
     if m.get("voice_name"):
-        w(f" · voice `{m.get('voice_name')}`")
+        w(f" · {L['voice'][lang]} `{m.get('voice_name')}`")
     w("\n\n")
-    w(f"## {L['overall'][lang]}: {_fmt(rep.overall, lang)} — {grade(rep.overall).get(lang)}\n\n")
+    w(f"## {L['overall'][lang]}: {_fmt(rep.overall, lang)} — {grade(rep.overall, rep.blocked).get(lang)}\n\n")
     w(f"| {L['dimension'][lang]} | {L['score'][lang]} | |\n|---|---:|---|\n")
     for d in rep.dimensions:
         w(f"| {d.name.get(lang)} | {_fmt(d.score, lang)} | {_bar(d.score)} |\n")
@@ -130,16 +132,16 @@ def render_html(rep: AuditReport, lang: str = "en", top_n: int = 5) -> str:
                          f"{e(r.finding.get(lang))}{rec}</div>")
         detail.append(f"<div class='card'><h3>{e(d.name.get(lang))} · {e(_fmt(d.score, lang))}</h3>{''.join(items)}</div>")
     notes = "".join(f"<li>{e(n.get(lang))}</li>" for n in rep.context_notes)
-    setup = (f"language <code>{e(str(m.get('language')))}</code> · LLM <code>{e(str(m.get('llm')))}</code> · "
+    setup = (f"{L['language'][lang]} <code>{e(str(m.get('language')))}</code> · LLM <code>{e(str(m.get('llm')))}</code> · "
              f"TTS <code>{e(str(m.get('tts_model')))}</code>")
     if m.get("voice_name"):
-        setup += f" · voice <code>{e(str(m.get('voice_name')))}</code>"
+        setup += f" · {L['voice'][lang]} <code>{e(str(m.get('voice_name')))}</code>"
     return f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(L['title'][lang])}</title>
 <style>{CSS}</style></head><body><main>
 <h1>{e(L['title'][lang])}</h1>
 <div class="meta">{e(L['agent'][lang])}: <strong>{e(rep.agent_name)}</strong> · {e(L['date'][lang])}: {date.today().isoformat()}<br>{setup}</div>
-<div class="card"><div class="score">{e(_fmt(rep.overall, lang))}</div><div class="grade">{e(grade(rep.overall).get(lang))}</div>
+<div class="card"><div class="score">{e(_fmt(rep.overall, lang))}</div><div class="grade">{e(grade(rep.overall, rep.blocked).get(lang))}</div>
 <table>{''.join(rows)}</table></div>
 <h2>{e(L['top'][lang])}</h2><ol>{tops}</ol>
 <h2>{e(L['detail'][lang])}</h2>{''.join(detail)}
@@ -188,7 +190,7 @@ def summarize(reports: List[AuditReport]) -> Dict:
             seen.add(base)
             gap_counter[base] += 1
             gap_meta.setdefault(base, g)
-    bands = Counter(grade(r.overall).en for r in reports)
+    bands = Counter(grade(r.overall, r.blocked).en for r in reports)
     return {"n": n, "avg": round(sum(overall) / len(overall), 1) if overall else None,
             "by_dim": by_dim, "gaps": gap_counter, "gap_meta": gap_meta, "bands": bands}
 

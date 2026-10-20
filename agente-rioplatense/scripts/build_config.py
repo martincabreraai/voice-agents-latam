@@ -36,7 +36,7 @@ def build():
                 "language": "es",
                 "max_conversation_duration_message": (
                     "Se nos está terminando el tiempo de esta llamada. "
-                    "Te dejo anotado el próximo paso y cuando quieras seguimos."
+                    "Quedate con el próximo paso que hablamos y, cuando quieras, me llamás y seguimos."
                 ),
                 "silence_end_call_message": (
                     "Parece que se cortó o estás ocupada. Te dejo seguir; cuando quieras, me volvés a llamar."

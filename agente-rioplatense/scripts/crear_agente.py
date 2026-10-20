@@ -3,9 +3,10 @@
   export ELEVENLABS_API_KEY=...   (never commit it)
   python3 scripts/crear_agente.py [--id-file PATH]
 
-Safety: aborts if an agent with the same name already exists, creates no phone
-number and does not enable a public share link. The agent id is written only to
---id-file (default: ../privado/agente-demo-id.txt, outside version control).
+Safety: aborts if an agent with the same name already exists (it reads every page
+of the search), creates no phone number and does not enable a public share link.
+The agent id is written only to --id-file (default: privado/agente-demo-id.txt at
+the repo root, a folder that .gitignore keeps out of version control).
 """
 import argparse
 import json
@@ -27,8 +28,24 @@ def call(method, path, body=None):
         with urllib.request.urlopen(req, timeout=60) as r:
             return json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8")[:2000]
+        # Only a short excerpt: error bodies can echo back parts of the request.
+        detail = e.read().decode("utf-8", "replace")[:300]
         sys.exit(f"{method} {path} failed: HTTP {e.code}: {detail}")
+
+
+def name_exists(name):
+    """Walks every page of the agent search: a duplicate on page two still counts."""
+    cursor = None
+    while True:
+        path = "/v1/convai/agents?page_size=100&search=" + urllib.request.quote(name)
+        if cursor:
+            path += "&cursor=" + urllib.request.quote(cursor)
+        page = call("GET", path)
+        if any(a.get("name") == name for a in page.get("agents", [])):
+            return True
+        cursor = page.get("next_cursor")
+        if not page.get("has_more") or not cursor:
+            return False
 
 
 def main():
@@ -39,8 +56,7 @@ def main():
         sys.exit("ELEVENLABS_API_KEY is not set")
     with open(os.path.join(HERE, "config.json"), encoding="utf-8") as f:
         config = json.load(f)
-    existing = call("GET", "/v1/convai/agents?page_size=100&search=" + urllib.request.quote(config["name"]))
-    if any(a.get("name") == config["name"] for a in existing.get("agents", [])):
+    if name_exists(config["name"]):
         sys.exit("An agent with this name already exists; not creating a duplicate.")
     created = call("POST", "/v1/convai/agents/create", config)
     agent_id = created["agent_id"]

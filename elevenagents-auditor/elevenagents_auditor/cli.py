@@ -31,11 +31,42 @@ def _voice_from_file(path: Optional[str], voice_id: Optional[str]) -> Optional[D
     data = _load(path)
     voices = data.get("voices") if isinstance(data, dict) and "voices" in data else data
     if isinstance(voices, dict):
-        return voices
+        voices = [voices]
     for v in voices or []:
         if v.get("voice_id") == voice_id:
             return v
+    print(f"warning: {path} has no metadata for voice {voice_id}; voice checks skipped", file=sys.stderr)
     return None
+
+
+def _anonymize(rep, alias: str) -> None:
+    """Replaces the agent name everywhere in the report and drops ids and quoted evidence.
+
+    Other identifiers that live inside prompts or tool names (a client's brand, for
+    example) are not detected: review the reports before sharing them.
+    """
+    original = rep.agent_name or ""
+    # Long names are replaced even inside other words (a tool called "consulta_acme"); short
+    # ones only as whole words, so a name like "Sol" doesn't eat "solo".
+    word = re.escape(original.strip())
+    if len(original.strip()) < 5:
+        word = r"(?<![^\W_])" + word + r"(?![^\W_])"
+    pattern = re.compile(word, re.IGNORECASE) if original.strip() else None
+
+    def clean(text: str) -> str:
+        return pattern.sub(alias, text) if pattern and text else text
+
+    rep.agent_name, rep.agent_id = alias, ""
+    rep.meta = {k: (clean(v) if isinstance(v, str) else v) for k, v in rep.meta.items()}
+    for note in rep.context_notes:
+        note.es, note.en = clean(note.es), clean(note.en)
+    for d in rep.dimensions:
+        for r in d.results:
+            r.rule_id = clean(r.rule_id)
+            for t in (r.title, r.finding, r.recommendation):
+                if t:
+                    t.es, t.en = clean(t.es), clean(t.en)
+            r.evidence = ""
 
 
 def _slug(text: str) -> str:
@@ -97,6 +128,9 @@ def cmd_batch(args) -> int:
         return 1
     reports = [audit(cfg, voice=v, region=args.region) for cfg, v in items]
     names = [f"Agent {i:02d}" for i in range(1, len(reports) + 1)] if args.anonymize else None
+    if names:
+        for rep, alias in zip(reports, names):
+            _anonymize(rep, alias)
     os.makedirs(args.out, exist_ok=True)
     for lang in _langs(args.lang):
         path = os.path.join(args.out, f"summary.{lang}.md")
@@ -108,10 +142,13 @@ def cmd_batch(args) -> int:
         f.write(render_batch_csv(reports, names))
     print(path)
     if not args.summary_only:
+        used: Dict[str, int] = {}
         for i, rep in enumerate(reports):
             stem = names[i].lower().replace(" ", "-") if names else _slug(rep.agent_name)
-            if names:
-                rep.agent_name = names[i]
+            # Two agents with the same (or same-looking) name must not overwrite each other.
+            used[stem] = used.get(stem, 0) + 1
+            if used[stem] > 1:
+                stem = f"{stem}-{used[stem]}"
             _write_reports(rep, os.path.join(args.out, "agents"), _langs(args.lang), stem)
     return 0
 
@@ -148,7 +185,7 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--region")
     b.add_argument("--lang", choices=["es", "en", "both"], default="both")
     b.add_argument("--out", default="reports")
-    b.add_argument("--anonymize", action="store_true", help="replace agent names with Agent 01, 02…")
+    b.add_argument("--anonymize", action="store_true", help="replace agent names with Agent 01, 02… and drop ids and quoted evidence")
     b.add_argument("--summary-only", action="store_true")
     b.set_defaults(func=cmd_batch)
 

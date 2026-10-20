@@ -63,6 +63,10 @@ def section_status(prompt: str, section: str) -> str:
     heads = headings(prompt)
     for h in heads:
         for kw in SECTION_KEYWORDS[section]:
+            # 'persona' as a role heading only when it leads ("# Persona"), so
+            # "# Derivación a una persona" is not read as a personality section.
+            if kw == "persona" and not h.startswith(kw):
+                continue
             if kw in h:
                 return "pass"
     body = normalize(prompt)
@@ -75,6 +79,54 @@ def section_status(prompt: str, section: str) -> str:
 def contains_any(text: str, keywords: List[str]) -> bool:
     t = normalize(text)
     return any(normalize(k) in t for k in keywords)
+
+
+NEGATIONS = [r"\bnunca\b", r"\bjamas\b", r"\bno\b", r"\bni\b", r"\bsin\b", r"\bevita", r"\bprohibid",
+             r"\bnada de\b", r"\bningun", r"\bnever\b", r"\bdo not\b", r"\bdon't\b", r"\bdont\b", r"\bmust not\b", r"\bavoid"]
+REQUESTS = [r"\bpedi(le|r|rle)?\b", r"\bsolicita(le|r)?\b", r"\brecolecta\b", r"\banota\b",
+            r"\bconfirma(le)?\b", r"\bask (the user |them |the caller )?for\b", r"\brequest\b",
+            r"\bcollect\b", r"\bobtain\b", r"\busa\b", r"\buse\b", r"\binclui\b", r"\binclude\b",
+            r"\bagrega\b", r"\badd\b"]
+
+
+def _sentences(text: str) -> List[str]:
+    """Sentences; a list item is kept together with its lead-in line ('Nunca pidas:')."""
+    out: List[str] = []
+    lead = ""
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            lead = ""
+            continue
+        if re.match(r"^([-*•]|\d+[.)])\s", stripped) and lead:
+            out.append(lead + " " + stripped)
+            continue
+        lead = stripped if stripped.endswith(":") else ""
+        out += [s for s in re.split(r"(?<=[.!?])\s+", stripped) if s]
+    return out
+
+
+def mentions(text: str, keywords: List[str], *, negated: Optional[bool] = None,
+             requested: bool = False) -> bool:
+    """True if some sentence mentions a keyword in the given context.
+
+    negated=True: the sentence forbids or avoids it ("nunca pidas la contraseña").
+    negated=False: the sentence mentions it with no negation at all.
+    requested=True: the sentence also asks for it or tells the model to use it ("pedile la contraseña").
+    Keyword presence alone is not compliance: a guardrail only counts when it is phrased as one.
+    """
+    kws = [normalize(k) for k in keywords]
+    for s in _sentences(text):
+        n = normalize(s)
+        if not any(k in n for k in kws):
+            continue
+        has_neg = any(re.search(p, n) for p in NEGATIONS)
+        if negated is not None and has_neg != negated:
+            continue
+        if requested and not any(re.search(p, n) for p in REQUESTS):
+            continue
+        return True
+    return False
 
 
 ES_MARKERS = [" el ", " la ", " de ", " que ", " y ", " los ", " para ", " con ", " por ", " una ",

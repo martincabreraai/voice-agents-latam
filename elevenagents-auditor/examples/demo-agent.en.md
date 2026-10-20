@@ -1,7 +1,7 @@
 # ElevenAgents agent audit
 
 **Agent:** Demo - Sol, onboarding de Tiendalia (rioplatense)  
-**Date:** 2026-10-19  
+**Date:** 2026-10-20  
 **Configuration read:** language `es` · LLM `gpt-6-luna` · TTS `eleven_flash_v2_5` · voice `Melody - Ecommerce Voice`
 
 ## Overall score: 95/100 — Ready to scale
@@ -56,7 +56,7 @@
 
 ### Models and latency · 100/100
 
-- ✅ **LLM generation** — Current LLM: 'gpt-6-luna'.
+- ✅ **LLM generation** — 'gpt-6-luna' belongs to a family the docs list today and is not one of the older generations.
 - ✅ **Real-time TTS model** — 'eleven_flash_v2_5' is real-time ready.
 - ✅ **Temperature** — Temperature 0.3.
 
@@ -77,7 +77,7 @@
 ### Guardrails and sensitive data · 80/100
 
 - ✅ **Platform guardrails** — Focus and prompt-injection protection are on.
-- ✅ **Never ask for sensitive data** — The prompt names the sensitive data it must not request.
+- ✅ **Never ask for sensitive data** — The prompt forbids asking for sensitive data.
 - ✅ **Conversation retention** — 30-day retention.
 - ❌ **Who can start conversations** — Public agent with no domain allowlist: anyone with the id can open sessions and burn credits.  
   → For a web widget, add the customer's domain to the allowlist; for apps, use signed URLs.

@@ -27,11 +27,18 @@ DIMENSIONS: Dict[str, Text] = {
     "lifecycle": Text("Duración y cierre de la llamada", "Call duration and ending"),
 }
 
-# Model knowledge, checked against the official docs in October 2026
+# Model knowledge, checked against the official docs on 20 October 2026
 # (elevenlabs.io/docs/overview/models and /eleven-agents/customization/llm).
+# Anything not listed here is reported as "not verified", never as approved.
 ENGLISH_ONLY_TTS = {"eleven_flash_v2", "eleven_turbo_v2"}
-TURBO_TO_FLASH = {"eleven_turbo_v2_5": "eleven_flash_v2_5", "eleven_turbo_v2": "eleven_flash_v2"}
-NON_REALTIME_TTS = {"eleven_multilingual_v2"}
+TURBO_TO_FLASH = {"eleven_turbo_v2_5": "eleven_flash_v2_5", "eleven_turbo_v2": "eleven_flash_v2"}  # deprecated
+REALTIME_TTS = {"eleven_v4_turbo", "eleven_v3_conversational", "eleven_flash_v2_5", "eleven_flash_v2"}
+NON_REALTIME_TTS = {"eleven_multilingual_v2", "eleven_v4", "eleven_v3"}
+MULTILINGUAL_TTS = {"eleven_v4", "eleven_v4_turbo", "eleven_v3", "eleven_v3_conversational",
+                    "eleven_multilingual_v2", "eleven_flash_v2_5", "eleven_turbo_v2_5"}
+KNOWN_TTS = ENGLISH_ONLY_TTS | set(TURBO_TO_FLASH) | REALTIME_TTS | NON_REALTIME_TTS | MULTILINGUAL_TTS
+# The docs list models by display name, not API id: families are matched by prefix.
+KNOWN_LLM_FAMILIES = ("gpt-", "gemini-", "claude-", "glm-", "qwen", "deepseek", "nemotron", "custom-llm")
 LEGACY_LLM_PREFIXES = ("gpt-3.5", "gpt-4-", "gpt-4o", "gemini-1.5", "gemini-2.0", "claude-3", "grok-beta")
 LEGACY_LLM_EXACT = {"gpt-4"}
 
@@ -49,8 +56,17 @@ KB_REFERENCES = ["base de conocimiento", "knowledge base", "documentos adjuntos"
                  "attached documents", "segun los documentos", "according to the documents", "faq"]
 END_CALL_GUIDANCE = ["end_call", "terminar la llamada", "finalizar la llamada", "cortar", "despedi",
                      "end the call", "hang up", "goodbye", "cierre de la llamada", "cerrar la conversacion"]
-PII_FIELD_HINTS = ["email", "mail", "correo", "telefono", "phone", "dni", "documento", "nombre",
-                   "name", "address", "direccion", "cuit", "tarjeta", "card"]
+# Personal-data categories in data collection fields -> redaction entity that covers them.
+PII_CATEGORIES = {
+    "email_address": ["email", "mail", "correo", "e-mail"],
+    "contact_number": ["telefono", "phone", "celular", "whatsapp", "movil", "mobile"],
+    "name": ["nombre", "name", "apellido", "surname"],
+    "unique_id": ["dni", "documento", "cuit", "cuil", "pasaporte", "passport", "ssn"],
+    "financial_id": ["tarjeta", "card", "cbu", "cvu", "iban", "bank", "bancari"],
+    "location": ["direccion", "address", "domicilio"],
+}
+NON_PERSONAL_QUALIFIERS = ["producto", "product", "tienda", "store", "plan", "archivo", "file", "empresa",
+                           "company", "campana", "campaign", "evento", "event", "curso", "course"]
 
 Check = Callable[["Ctx"], List[RuleResult]]
 CHECKS: List[Check] = []
@@ -87,17 +103,23 @@ class Ctx:
         self.system_tool_names = {k for k, v in self.built_in.items() if v}
         self.system_tool_names |= {t.get("name") for t in inline if (t or {}).get("type") == "system"}
         self.kb = self.p.get("knowledge_base") or []
+        self.region_source = "arg" if region else None
         self.region = region or self._infer_region()
 
     def _infer_region(self) -> Optional[str]:
+        # The prompt goes first: inferring the region from the voice accent and then
+        # checking the accent against it would always pass.
+        if self.lang == "es" and tu.uses_voseo(self.prompt):
+            self.region_source = "prompt"
+            return "es-AR"
         if self.voice:
             accent = tu.normalize(str(dig(self.voice, "labels.accent", "")))
             if "argentin" in accent or "rioplatense" in accent:
+                self.region_source = "voice"
                 return "es-AR"
             if "mexic" in accent:
+                self.region_source = "voice"
                 return "es-MX"
-        if self.lang == "es" and tu.uses_voseo(self.prompt):
-            return "es-AR"
         return None
 
 
@@ -210,7 +232,13 @@ def prompt_voice_style(c: Ctx) -> List[RuleResult]:
                      Text("Agregá en '# Tono': 'una o dos oraciones por turno y una sola pregunta por vez'.",
                           "Add to '# Tone': 'one or two sentences per turn and a single question at a time'.")))
     title = Text("Sin formato visual en la voz", "No visual formatting in speech")
-    if tu.contains_any(c.prompt, NO_MARKDOWN):
+    if tu.mentions(c.prompt, NO_MARKDOWN, negated=False, requested=True):
+        out.append(R("prompt.no_markdown", "prompt", "low", "fail", title,
+                     Text("El prompt le pide al modelo usar listas, emojis o formato: en voz se leen en voz alta o se pierden.",
+                          "The prompt tells the model to use lists, emojis or formatting: on voice they get read out or lost."),
+                     Text("Reemplazalo por: 'nada de listas, viñetas ni emojis: todo lo que escribís se convierte en voz'.",
+                          "Replace it with: 'no lists, bullets or emojis: everything you write is spoken aloud'.")))
+    elif tu.mentions(c.prompt, NO_MARKDOWN, negated=True):
         out.append(R("prompt.no_markdown", "prompt", "low", "pass", title,
                      Text("El prompt evita listas, emojis o formato que la voz no puede leer.",
                           "The prompt rules out lists, emojis or formatting that speech can't render.")))
@@ -309,12 +337,18 @@ def language_and_voice(c: Ctx) -> List[RuleResult]:
         out.append(R("lang.tts_language", dim, "critical", "fail", title,
                      Text(f"El agente habla '{c.lang}' pero el modelo de voz '{model}' es solo inglés.",
                           f"The agent speaks '{c.lang}' but TTS model '{model}' is English-only."),
-                     Text("Usá eleven_flash_v2_5 (multilingüe, ~75 ms) o eleven_v3_conversational.",
-                          "Use eleven_flash_v2_5 (multilingual, ~75 ms) or eleven_v3_conversational."),
+                     Text("Usá eleven_flash_v2_5 (multilingüe, ~75 ms) o eleven_v4_turbo (más expresivo, ~100 ms).",
+                          "Use eleven_flash_v2_5 (multilingual, ~75 ms) or eleven_v4_turbo (more expressive, ~100 ms)."),
                      model))
-    elif model:
+    elif model in MULTILINGUAL_TTS or (model in ENGLISH_ONLY_TTS and c.lang == "en"):
         out.append(R("lang.tts_language", dim, "critical", "pass", title,
                      Text(f"'{model}' soporta '{c.lang}'.", f"'{model}' supports '{c.lang}'."), evidence=model))
+    elif model:
+        out.append(R("lang.tts_language", dim, "medium", "partial", title,
+                     Text(f"'{model}' no está en la lista de modelos que conoce el auditor: no se pudo verificar que soporte '{c.lang}'.",
+                          f"'{model}' is not in the auditor's model list: support for '{c.lang}' could not be verified."),
+                     Text("Confirmá el id y los idiomas del modelo en la documentación de modelos de ElevenLabs.",
+                          "Confirm the model id and its languages in the ElevenLabs models documentation."), model))
     detected = tu.detect_language(c.prompt)
     title = Text("Idioma del prompt y del agente", "Prompt and agent language")
     if detected and detected != c.lang:
@@ -379,7 +413,12 @@ def _voice_checks(c: Ctx, dim: str, model: str) -> List[RuleResult]:
         out.append(R("lang.voice_native", dim, "high", "pass", title,
                      Text(f"Voz '{c.voice.get('name')}' apta para '{c.lang}'.",
                           f"Voice '{c.voice.get('name')}' fits '{c.lang}'.")))
-    if c.region:
+    if c.region and c.region_source == "voice":
+        out.append(R("lang.voice_accent", dim, "medium", "na",
+                     Text("Acento de la voz y región del público", "Voice accent matches the audience region"),
+                     Text(f"La región ({c.region}) se dedujo del acento de la voz: pasá --region para verificar que el acento sea el del público.",
+                          f"The region ({c.region}) was inferred from the voice accent: pass --region to check the accent against the audience.")))
+    elif c.region:
         want = {"es-AR": "argentin", "es-MX": "mexic"}.get(c.region)
         title = Text("Acento de la voz y región del público", "Voice accent matches the audience region")
         if want and want in accent:
@@ -421,9 +460,17 @@ def models_latency(c: Ctx) -> List[RuleResult]:
                           "aciertos y llamadas a herramientas antes de cambiar.",
                           "Benchmark two or three current low-latency candidates on your own cases (latency, accuracy, "
                           "tool calls) before switching."), llm))
-    elif llm:
+    elif llm and tu.normalize(llm).startswith(KNOWN_LLM_FAMILIES):
         out.append(R("models.llm_generation", dim, "medium", "pass", title,
-                     Text(f"LLM actual: '{llm}'.", f"Current LLM: '{llm}'."), evidence=llm))
+                     Text(f"'{llm}' es de una familia que la documentación lista hoy y no figura entre las generaciones viejas.",
+                          f"'{llm}' belongs to a family the docs list today and is not one of the older generations."),
+                     evidence=llm))
+    elif llm:
+        out.append(R("models.llm_generation", dim, "medium", "partial", title,
+                     Text(f"'{llm}' no es una familia de LLM que conozca el auditor: no se pudo verificar.",
+                          f"'{llm}' is not an LLM family the auditor knows: it could not be verified."),
+                     Text("Confirmá que el id exista en la lista de LLM de ElevenAgents (o que sea un LLM propio configurado).",
+                          "Confirm the id exists in the ElevenAgents LLM list (or is a configured custom LLM)."), llm))
     model = c.tts.get("model_id") or ""
     title = Text("Modelo de voz para tiempo real", "Real-time TTS model")
     if model in TURBO_TO_FLASH:
@@ -435,11 +482,17 @@ def models_latency(c: Ctx) -> List[RuleResult]:
         out.append(R("models.tts_realtime", dim, "medium", "fail", title,
                      Text(f"'{model}' es un modelo de alta calidad pero no está pensado para tiempo real: suma latencia en cada turno.",
                           f"'{model}' is a high-quality model not designed for real time: it adds latency to every turn."),
-                     Text("Usá eleven_flash_v2_5 (~75 ms) o, si importa la expresividad, eleven_v3_conversational.",
-                          "Use eleven_flash_v2_5 (~75 ms) or, if expressiveness matters, eleven_v3_conversational."), model))
-    elif model:
+                     Text("Usá eleven_flash_v2_5 (~75 ms) o, si importa la expresividad, eleven_v4_turbo (~100 ms).",
+                          "Use eleven_flash_v2_5 (~75 ms) or, if expressiveness matters, eleven_v4_turbo (~100 ms)."), model))
+    elif model in REALTIME_TTS:
         out.append(R("models.tts_realtime", dim, "medium", "pass", title,
                      Text(f"'{model}' es apto para tiempo real.", f"'{model}' is real-time ready."), evidence=model))
+    elif model:
+        out.append(R("models.tts_realtime", dim, "medium", "partial", title,
+                     Text(f"'{model}' no está en la lista de modelos que conoce el auditor: no se pudo verificar su latencia.",
+                          f"'{model}' is not in the auditor's model list: its latency could not be verified."),
+                     Text("Confirmá en la documentación que sea un modelo pensado para tiempo real.",
+                          "Check the docs to confirm it is a real-time model."), model))
     temp = c.p.get("temperature")
     if isinstance(temp, (int, float)):
         title = Text("Temperatura", "Temperature")
@@ -574,10 +627,14 @@ def tools(c: Ctx) -> List[RuleResult]:
                          Text(f"El prompt no menciona '{name}'.", f"The prompt never mentions '{name}'."),
                          Text("Agregá una sección '# Herramientas' con cuándo usarla, cómo y qué hacer si falla.",
                               "Add a '# Tools' section with when to use it, how, and what to do if it fails.")))
-    if c.tool_ids and not c.custom_tools:
-        out.append(R("tools.workspace", dim, "low", "na", Text("Herramientas del workspace", "Workspace tools"),
-                     Text(f"{len(c.tool_ids)} herramienta(s) referenciadas por id: su definición no viene en esta configuración.",
-                          f"{len(c.tool_ids)} tool(s) referenced by id: their definitions are not in this config.")))
+    if c.tool_ids:
+        out.append(R("tools.workspace", dim, "medium", "partial", Text("Herramientas del workspace", "Workspace tools"),
+                     Text(f"{len(c.tool_ids)} herramienta(s) referenciadas por id no se inspeccionaron (ni offline ni con la API): "
+                          "este puntaje solo cubre lo que está en la configuración.",
+                          f"{len(c.tool_ids)} tool(s) referenced by id were not inspected (offline or via the API): "
+                          "this score only covers what is in the config."),
+                     Text("Revisá a mano la descripción y los parámetros de esas herramientas.",
+                          "Review those tools' descriptions and parameters by hand.")))
     title = Text("Qué hacer si una herramienta falla", "What to do when a tool fails")
     if tu.contains_any(c.prompt, ["falla", "fails", "error", "no responde", "timeout", "no funciona"]):
         out.append(R("tools.error_handling", dim, "medium", "pass", title,
@@ -627,7 +684,8 @@ def knowledge(c: Ctx) -> List[RuleResult]:
     out = [R("kb.present", dim, "high", "pass", Text("Base de conocimiento", "Knowledge base"),
              Text(f"{len(c.kb)} documento(s) conectado(s).", f"{len(c.kb)} document(s) attached."))]
     title = Text("Instrucción de no inventar fuera de la base", "Instruction not to answer beyond the KB")
-    if tu.section_status(c.prompt, "errors") != "fail":
+    invents = tu.mentions(c.prompt, ["invent", "make up", "make it up", "imagina"], negated=False)
+    if tu.section_status(c.prompt, "errors") != "fail" and not invents:
         out.append(R("kb.grounding", dim, "medium", "pass", title,
                      Text("El prompt dice qué hacer cuando la respuesta no está en la base.",
                           "The prompt says what to do when the answer isn't in the KB.")))
@@ -680,10 +738,18 @@ def safety(c: Ctx) -> List[RuleResult]:
                           "Turn on 'focus' (keeps it on topic) and 'prompt_injection' (resists instruction "
                           "hijacking); they add a layer on top of the prompt.")))
     title = Text("Nunca pedir datos sensibles", "Never ask for sensitive data")
-    if tu.contains_any(c.prompt, SENSITIVE_DATA):
+    if tu.mentions(c.prompt, SENSITIVE_DATA, negated=False, requested=True):
+        out.append(R("safety.sensitive_data", dim, "critical", "fail", title,
+                     Text("El prompt le pide al agente solicitar datos sensibles (contraseñas, códigos, tarjetas o datos bancarios).",
+                          "The prompt tells the agent to ask for sensitive data (passwords, codes, cards or bank details)."),
+                     Text("Sacá esa instrucción y agregá en '# Límites' que nunca los pide ni los acepta; si el caso los necesita, "
+                          "derivá a un canal seguro (formulario o pago tokenizado), nunca por voz.",
+                          "Remove that instruction and add to '# Guardrails' that it never asks for or accepts them; if the use "
+                          "case needs them, route to a secure channel (form or tokenized payment), never by voice.")))
+    elif tu.mentions(c.prompt, SENSITIVE_DATA, negated=True):
         out.append(R("safety.sensitive_data", dim, "high", "pass", title,
-                     Text("El prompt menciona qué datos sensibles no pedir.",
-                          "The prompt names the sensitive data it must not request.")))
+                     Text("El prompt prohíbe pedir datos sensibles.",
+                          "The prompt forbids asking for sensitive data.")))
     else:
         out.append(R("safety.sensitive_data", dim, "high", "fail", title,
                      Text("El prompt no prohíbe pedir contraseñas, tarjetas, documentos o datos bancarios.",
@@ -700,18 +766,34 @@ def safety(c: Ctx) -> List[RuleResult]:
     else:
         out.append(R("safety.retention", dim, "medium", "pass", title,
                      Text(f"Retención de {retention} días.", f"{retention}-day retention.")))
-    dc = c.ps.get("data_collection") or {}
-    pii_fields = [k for k in dc if any(h in tu.normalize(k) for h in PII_FIELD_HINTS)]
-    if pii_fields:
-        redaction = dig(c.ps, "privacy.conversation_history_redaction.enabled", False)
+    pii = _pii_fields(c.ps.get("data_collection") or {})
+    if pii:
+        red = dig(c.ps, "privacy.conversation_history_redaction", {}) or {}
         title = Text("Redacción de datos personales", "PII redaction")
-        out.append(R("safety.redaction", dim, "medium", "pass" if redaction else "fail", title,
-                     Text("Se recolectan datos personales con redacción activa." if redaction else
-                          f"Se recolectan datos personales ({', '.join(pii_fields)}) sin redacción del historial.",
-                          "Personal data is collected with redaction on." if redaction else
-                          f"Personal data is collected ({', '.join(pii_fields)}) without history redaction."),
-                     None if redaction else Text("Activá la redacción del historial o dejá de guardar esos campos.",
-                                                 "Enable history redaction or stop storing those fields.")))
+        fields = ", ".join(sorted(pii))
+        if not red.get("enabled"):
+            out.append(R("safety.redaction", dim, "medium", "fail", title,
+                         Text(f"Se recolectan datos personales ({fields}) sin redacción del historial.",
+                              f"Personal data is collected ({fields}) without history redaction."),
+                         Text("Activá la redacción del historial con esas entidades o dejá de guardar esos campos.",
+                              "Enable history redaction for those entities or stop storing those fields.")))
+        else:
+            entities = [str(e) for e in (red.get("entities") or [])]
+            needed = sorted({cat for cats in pii.values() for cat in cats})
+            missing = [n for n in needed if not any(n == e or n.startswith(e + ".") or e.startswith(n + ".")
+                                                    for e in entities)]
+            if not entities or missing:
+                gap = ", ".join(missing or needed)
+                out.append(R("safety.redaction", dim, "medium", "partial", title,
+                             Text(f"La redacción está activa, pero no cubre estas entidades: {gap}.",
+                                  f"Redaction is on, but it doesn't cover these entities: {gap}."),
+                             Text("Sumá esas entidades a la lista de redacción (por ejemplo 'email_address' o 'contact_number').",
+                                  "Add those entities to the redaction list (for example 'email_address' or 'contact_number')."),
+                             fields))
+            else:
+                out.append(R("safety.redaction", dim, "medium", "pass", title,
+                             Text("Los datos personales que se recolectan están cubiertos por la redacción.",
+                                  "The personal data collected is covered by redaction."), evidence=fields))
     auth = dig(c.ps, "auth.enable_auth", False)
     allow = dig(c.ps, "auth.allowlist", []) or []
     title = Text("Quién puede iniciar conversaciones", "Who can start conversations")
@@ -850,6 +932,25 @@ def lifecycle(c: Ctx) -> List[RuleResult]:
     else:
         out.append(R("life.silence", dim, "medium", "pass", title,
                      Text("Las llamadas abandonadas tienen salida.", "Abandoned calls have a way out.")))
+    return out
+
+
+def _pii_fields(dc: Dict[str, Any]) -> Dict[str, List[str]]:
+    """Data collection fields that hold personal data, by field name or description."""
+    out: Dict[str, List[str]] = {}
+    for key, spec in dc.items():
+        text = tu.normalize(key.replace("_", " ") + " " + str((spec or {}).get("description") or ""))
+        words = re.findall(r"[a-z0-9-]+", text)
+        cats = []
+        for cat, hints in PII_CATEGORIES.items():
+            if not any(w.startswith(h) for w in words for h in hints):
+                continue
+            # "nombre del producto" is not a person's name.
+            if cat == "name" and any(w.startswith(q) for w in words for q in NON_PERSONAL_QUALIFIERS):
+                continue
+            cats.append(cat)
+        if cats:
+            out[key] = cats
     return out
 
 
